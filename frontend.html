@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>Deep Research 助手</title>
+  <style>
+    body {
+      font-family: 'Helvetica', sans-serif;
+      background-color: #f5f5f5;
+      padding: 40px;
+      max-width: 800px;
+      margin: auto;
+    }
+
+    h1 {
+      color: #333;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 20px;
+    }
+
+    textarea {
+      width: 100%;
+      margin-top: 5px;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      resize: vertical;
+      height: 100px;
+    }
+
+    button {
+      margin-top: 20px;
+      padding: 12px 20px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    button:hover {
+      background-color: #218838;
+    }
+
+    #thinking {
+      margin-top: 10px;
+      color: gray;
+      display: none;
+    }
+
+    pre {
+      background-color: #eee;
+      padding: 15px;
+      margin-top: 20px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>Deep Research 助手</h1>
+
+    <label for="query">請輸入你想查詢什麼主題或類型的新聞/文章：</label>
+    <textarea id="query" placeholder="例如：最近關於生成式AI的新聞大概有哪些？"></textarea>
+
+    <button id="btnStart" type="button">開始分析</button>
+
+    <div id="thinking">AI 正在思考中⋯⋯</div>
+
+    <label>AI 回覆摘要：</label>
+    <pre id="output"></pre>
+  </div>
+
+  <script>
+    function render(text) {
+      document.getElementById("output").textContent = text;
+    }
+
+    function thinkingText(show) {
+      document.getElementById("thinking").style.display = show ? "block" : "none";
+    }
+
+    async function startDeepResearch() {
+      const query = document.getElementById("query").value.trim();
+      const output = document.getElementById("output");
+      output.textContent = "";
+
+      if (!query) {
+        alert("請輸入查詢問題");
+        return;
+      }
+
+      thinkingText(true);
+
+      const socket = new WebSocket("ws://localhost:8000/ws/deepresearch");
+      let isClosed = false;
+      let buffer = "";
+
+      socket.onopen = () => {
+        socket.send(query);
+      };
+
+      socket.onmessage = (event) => {
+        const chunk = event.data;
+        if (chunk === "[DONE]") {
+          render(buffer);
+          thinkingText(false);
+          return;
+        }
+        if (chunk.trim().toLowerCase() === "ping") return;
+        buffer += chunk;
+        render(buffer);
+      };
+
+      socket.onerror = (event) => {
+        console.error("WebSocket 錯誤:", event);
+        alert("WebSocket 錯誤，請檢查後端是否正常");
+        thinkingText(false);
+      };
+
+      socket.onclose = () => {
+        isClosed = true;
+        thinkingText(false);
+      };
+
+      window.addEventListener("beforeunload", () => {
+        if (!isClosed) socket.close();
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("btnStart").addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          await startDeepResearch();
+        } catch (err) {
+          console.error("Unhandled error in startDeepResearch:", err);
+        }
+      });
+
+      document.getElementById("output").textContent = "";
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    });
+
+    window.addEventListener("error", (e) => {
+      console.error("全域錯誤:", e.message);
+    });
+
+    window.addEventListener("beforeunload", () => {
+      console.warn("⚠️ 頁面即將刷新");
+    });
+  </script>
+</body>
+</html>
